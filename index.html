@@ -1,0 +1,1442 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Ccircle cx=%2732%27 cy=%2732%27 r=%2728%27 fill=%27%230f766e%27/%3E%3Ccircle cx=%2732%27 cy=%2732%27 r=%2715%27 fill=%27white%27/%3E%3Ccircle cx=%2732%27 cy=%2732%27 r=%279%27 fill=%27%23d97706%27/%3E%3C/svg%3E">
+  <title>H-2A Laundry and Labor Camp Crosswalk</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root {
+      --bg: #f7f8f6;
+      --panel: #ffffff;
+      --text: #18211d;
+      --muted: #5f6d65;
+      --line: #d8ded9;
+      --accent: #0f766e;
+      --laundry: #d97706;
+      --state-camp: #7c3aed;
+      --business: #2563eb;
+      --worksite: #0f766e;
+      --housing: #b91c1c;
+      --focus: #111827;
+      --soft: #eef3ef;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body,
+    #app {
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      letter-spacing: 0;
+    }
+
+    #app {
+      display: grid;
+      grid-template-areas: "panel map";
+      grid-template-columns: minmax(320px, 390px) 1fr;
+      min-height: 100vh;
+    }
+
+    aside {
+      grid-area: panel;
+      overflow: auto;
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    main {
+      grid-area: map;
+      min-width: 0;
+      min-height: 0;
+      position: relative;
+    }
+
+    #map {
+      height: 100%;
+      width: 100%;
+      background: #dfe7df;
+    }
+
+    .panel-section {
+      border-bottom: 1px solid var(--line);
+      padding: 16px 18px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 20px;
+      line-height: 1.2;
+      font-weight: 700;
+    }
+
+    h2 {
+      font-size: 16px;
+      line-height: 1.25;
+      margin-bottom: 8px;
+    }
+
+    h3 {
+      font-size: 13px;
+      line-height: 1.3;
+      margin: 14px 0 8px;
+      color: var(--focus);
+    }
+
+    .subhead,
+    .note,
+    .small {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .subhead {
+      margin-top: 6px;
+    }
+
+    .warning {
+      margin-top: 10px;
+      border-left: 3px solid var(--housing);
+      padding: 8px 10px;
+      background: #fff5f5;
+      color: #571b1b;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .coverage {
+      margin-top: 10px;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 9px 10px;
+      background: var(--soft);
+      min-width: 0;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 19px;
+      line-height: 1.1;
+      color: var(--focus);
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.25;
+    }
+
+    .control-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    label {
+      display: grid;
+      gap: 5px;
+      color: var(--focus);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    select,
+    input[type="search"],
+    input[type="range"] {
+      width: 100%;
+    }
+
+    select,
+    input[type="search"] {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      min-height: 34px;
+      padding: 6px 8px;
+    }
+
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--focus);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .check-row input {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    button,
+    .button-link {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--focus);
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      min-height: 32px;
+      padding: 6px 10px;
+    }
+
+    button:hover,
+    button:focus-visible,
+    .button-link:hover,
+    .button-link:focus-visible {
+      border-color: var(--accent);
+      outline: 2px solid rgba(15, 118, 110, 0.2);
+      outline-offset: 1px;
+      text-decoration: none;
+    }
+
+    .button-link {
+      display: inline-flex;
+      align-items: center;
+      text-decoration: none;
+    }
+
+    .legend {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 12px;
+      margin-top: 10px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 12px;
+      min-width: 0;
+    }
+
+    .dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      flex: 0 0 11px;
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+    }
+
+    .detail-body {
+      display: grid;
+      gap: 10px;
+    }
+
+    .empty {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .match-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .match-item {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 9px 10px;
+      background: #fff;
+    }
+
+    .match-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    .match-title span:first-child {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      background: var(--soft);
+      color: var(--muted);
+      flex: 0 0 auto;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1;
+      padding: 4px 6px;
+      white-space: nowrap;
+    }
+
+    .kv {
+      display: grid;
+      gap: 4px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .kv b {
+      color: var(--focus);
+    }
+
+    a {
+      color: #0b5d56;
+      text-decoration: none;
+    }
+
+    a:hover,
+    a:focus-visible {
+      text-decoration: underline;
+    }
+
+    .status {
+      position: absolute;
+      left: 12px;
+      top: 12px;
+      z-index: 500;
+      max-width: min(420px, calc(100% - 24px));
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.94);
+      color: var(--focus);
+      font-size: 12px;
+      line-height: 1.35;
+      padding: 9px 10px;
+      box-shadow: 0 8px 24px rgba(17, 24, 39, 0.12);
+    }
+
+    .leaflet-popup-content {
+      min-width: 230px;
+      max-width: 320px;
+      margin: 12px;
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.35;
+    }
+
+    .name-tooltip {
+      border: 1px solid rgba(17, 24, 39, 0.2);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.96);
+      color: var(--focus);
+      box-shadow: 0 4px 14px rgba(17, 24, 39, 0.16);
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.25;
+      padding: 5px 7px;
+    }
+
+    .name-tooltip .tooltip-meta {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 400;
+    }
+
+    .popup-title {
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+
+    .popup-meta {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    @media (max-width: 760px) {
+      #app {
+        grid-template-areas:
+          "map"
+          "panel";
+        grid-template-columns: 1fr;
+        grid-template-rows: 54vh auto;
+      }
+
+      aside {
+        border-right: 0;
+        border-top: 1px solid var(--line);
+      }
+
+      .panel-section {
+        padding: 14px 14px;
+      }
+
+      .metrics,
+      .legend {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <aside>
+      <section class="panel-section">
+        <h1>H-2A Laundry and Labor Camp Crosswalk</h1>
+        <p class="subhead">Midwest non-housing job-order locations, nearby laundromats, and public state-inspected labor camps. Source snapshot: June 29, 2026.</p>
+        <div class="warning">Public GitHub Pages view: local H-2A housing rows and direct housing identifiers are excluded.</div>
+        <div class="metrics" aria-live="polite">
+          <div class="metric"><strong id="metricLocations">--</strong><span>mapped H-2A locations</span></div>
+          <div class="metric"><strong id="metricLaundries">--</strong><span>laundromats</span></div>
+          <div class="metric"><strong id="metricMatches">--</strong><span>laundry matches</span></div>
+          <div class="metric"><strong id="metricStateCamps">--</strong><span>state-inspected camps</span></div>
+          <div class="metric"><strong id="metricCrosswalk">--</strong><span>confirmed camp links</span></div>
+          <div class="metric"><strong id="metricDistance">--</strong><span>nearest avg km</span></div>
+        </div>
+        <p id="dataCoverage" class="note coverage">Loading source coverage...</p>
+      </section>
+
+      <section class="panel-section">
+        <div class="control-grid">
+          <label>
+            Search
+            <input id="search" type="search" placeholder="Employer, camp, address, laundromat">
+          </label>
+          <label>
+            State
+            <select id="stateFilter"></select>
+          </label>
+          <label>
+            District
+            <select id="districtFilter"></select>
+          </label>
+          <label>
+            H-2A location type
+            <select id="typeFilter">
+              <option value="">All types</option>
+              <option value="business">Business</option>
+              <option value="worksite">Worksite</option>
+              <option value="housing">Housing</option>
+            </select>
+          </label>
+          <label>
+            Laundry confidence
+            <select id="confidenceFilter">
+              <option value="">All confidence</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </label>
+          <label>
+            Camp crosswalk status
+            <select id="campLinkFilter">
+              <option value="">All state camp records</option>
+              <option value="linked">Confirmed same site/operator</option>
+              <option value="candidate_review">Candidate review</option>
+              <option value="unmatched">Unmatched</option>
+            </select>
+          </label>
+          <label>
+            Max distance: <span id="distanceLabel">8.0 km</span>
+            <input id="distanceFilter" type="range" min="0.5" max="8" value="8" step="0.5">
+          </label>
+          <label class="check-row">
+            <input id="sensitiveFilter" type="checkbox" disabled>
+            H-2A housing rows removed from public view
+          </label>
+          <label class="check-row">
+            <input id="stateCampFilter" type="checkbox" checked>
+            Show state-inspected camp layer
+          </label>
+        </div>
+        <div class="button-row">
+          <button id="resetFilters" type="button">Reset</button>
+          <button id="fitFiltered" type="button">Fit map</button>
+          <a class="button-link" href="data/processed/h2a_state_camp_crosswalk.csv" download>Download crosswalk</a>
+        </div>
+      </section>
+
+      <section class="panel-section">
+        <h2>Layers</h2>
+        <div class="legend">
+          <div class="legend-item"><span class="dot" style="background: var(--business);"></span>Business</div>
+          <div class="legend-item"><span class="dot" style="background: var(--worksite);"></span>Worksite</div>
+          <div class="legend-item"><span class="dot" style="background: var(--housing);"></span>Housing</div>
+          <div class="legend-item"><span class="dot" style="background: var(--laundry);"></span>Laundry</div>
+          <div class="legend-item"><span class="dot" style="background: var(--state-camp);"></span>State-inspected camp</div>
+          <div class="legend-item"><span class="dot" style="background: #9ca3af; opacity: 0.45;"></span>No laundry in radius</div>
+        </div>
+      </section>
+
+      <section class="panel-section">
+        <h2 id="detailTitle">Laundry matches</h2>
+        <div id="detail" class="detail-body">
+          <p class="empty">Loading map data...</p>
+        </div>
+      </section>
+    </aside>
+
+    <main>
+      <div id="map"></div>
+      <div id="status" class="status">Loading CSV and map tiles...</div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script>
+    const CSV_URL = "data/processed/consolidated_proximity.csv";
+    const STATE_CAMPS_CSV_URL = "data/processed/state_inspected_migrant_housing.csv";
+    const CAMP_CROSSWALK_CSV_URL = "data/processed/h2a_state_camp_crosswalk.csv";
+    const $ = (id) => document.getElementById(id);
+
+    const map = L.map("map", {
+      preferCanvas: true,
+      zoomControl: true
+    }).setView([42.3, -89.9], 6);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    const canvasRenderer = L.canvas({ padding: 0.5 });
+    const h2aLayer = L.layerGroup().addTo(map);
+    const laundryLayer = L.layerGroup().addTo(map);
+    const stateCampLayer = L.layerGroup().addTo(map);
+    const lineLayer = L.layerGroup().addTo(map);
+
+    const model = {
+      sourceRows: 0,
+      statusCounts: new Map(),
+      invalidCoordinateIds: new Set(),
+      rows: [],
+      h2aRows: [],
+      matchRows: [],
+      locations: new Map(),
+      laundries: new Map(),
+      stateCamps: new Map(),
+      crosswalkRows: [],
+      crosswalkByCamp: new Map(),
+      crosswalkByLocation: new Map(),
+      locationMarkers: new Map(),
+      laundryMarkers: new Map(),
+      stateCampMarkers: new Map(),
+      filteredLocationRows: [],
+      filteredRows: [],
+      filteredLocationIds: new Set(),
+      filteredLaundryIds: new Set(),
+      filteredStateCampIds: new Set()
+    };
+
+    const colors = {
+      business: getComputedStyle(document.documentElement).getPropertyValue("--business").trim(),
+      worksite: getComputedStyle(document.documentElement).getPropertyValue("--worksite").trim(),
+      housing: getComputedStyle(document.documentElement).getPropertyValue("--housing").trim(),
+      laundry: getComputedStyle(document.documentElement).getPropertyValue("--laundry").trim(),
+      stateCamp: getComputedStyle(document.documentElement).getPropertyValue("--state-camp").trim()
+    };
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function numberValue(value) {
+      if (value === null || value === undefined) return null;
+      if (typeof value === "string" && value.trim() === "") return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function inMidwestBounds(lat, lon) {
+      return lat >= 35 && lat <= 50 && lon >= -105 && lon <= -75;
+    }
+
+    function normalizePoint(latValue, lonValue) {
+      const lat = numberValue(latValue);
+      const lon = numberValue(lonValue);
+      if (lat === null || lon === null) return null;
+      if (inMidwestBounds(lat, lon)) return { lat, lon };
+      if (inMidwestBounds(lat, -Math.abs(lon))) return { lat, lon: -Math.abs(lon) };
+      if (inMidwestBounds(lon, lat)) return { lat: lon, lon: lat };
+      if (inMidwestBounds(lon, -Math.abs(lat))) return { lat: lon, lon: -Math.abs(lat) };
+      return null;
+    }
+
+    function hasRawPoint(latValue, lonValue) {
+      return numberValue(latValue) !== null && numberValue(lonValue) !== null;
+    }
+
+    function attachMapCoordinates(row) {
+      const h2aPoint = normalizePoint(row.h2a_lat, row.h2a_lon);
+      const laundryPoint = normalizePoint(row.laundromat_lat, row.laundromat_lon);
+      row._h2aLat = h2aPoint ? h2aPoint.lat : null;
+      row._h2aLon = h2aPoint ? h2aPoint.lon : null;
+      row._laundryLat = laundryPoint ? laundryPoint.lat : null;
+      row._laundryLon = laundryPoint ? laundryPoint.lon : null;
+    }
+
+    function boolValue(value) {
+      return String(value).toLowerCase() === "true";
+    }
+
+    function formatInt(value) {
+      return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value || 0);
+    }
+
+    function formatKm(value) {
+      const n = numberValue(value);
+      return n === null ? "--" : `${n.toFixed(2)} km`;
+    }
+
+    function typeColor(type) {
+      if (type === "housing") return colors.housing;
+      if (type === "worksite") return colors.worksite;
+      return colors.business;
+    }
+
+    function cleanName(value, fallback) {
+      const text = String(value || "").trim();
+      return text || fallback;
+    }
+
+    function uniqueSorted(values) {
+      return Array.from(new Set(values.filter(Boolean))).sort();
+    }
+
+    function haystack(row) {
+      return [
+        row.h2a_entity_name,
+        row.h2a_dba_or_agent,
+        row.h2a_address,
+        row.h2a_case_numbers,
+        row.laundromat_name,
+        row.laundromat_address,
+        row.laundromat_phone,
+        row.district_office,
+        row.state
+      ].join(" ").toLowerCase();
+    }
+
+    function stateCampHaystack(camp) {
+      return [
+        camp.facility_name,
+        camp.operator_name,
+        camp.full_address,
+        camp.county,
+        camp.program_state,
+        camp.program_name,
+        camp.license_or_permit_id,
+        camp.crosswalk?.match_status,
+        camp.crosswalk?.h2a_entity_name,
+        camp.crosswalk?.h2a_address,
+        camp.crosswalk?.h2a_case_numbers
+      ].join(" ").toLowerCase();
+    }
+
+    function campCrosswalkStatus(camp) {
+      return camp.crosswalk?.match_status || "unmatched";
+    }
+
+    function confirmedCampLink(camp) {
+      return ["same_site", "same_operator"].includes(campCrosswalkStatus(camp));
+    }
+
+    function hasH2aCoordinates(row) {
+      return row._h2aLat !== null &&
+        row._h2aLon !== null &&
+        Boolean(row.location_id);
+    }
+
+    function hasLaundryCoordinates(row) {
+      return row._laundryLat !== null &&
+        row._laundryLon !== null &&
+        Boolean(row.laundromat_id);
+    }
+
+    function baseRowPasses(row) {
+      const stateValue = $("stateFilter").value;
+      const districtValue = $("districtFilter").value;
+      const typeValue = $("typeFilter").value;
+      const includeSensitive = $("sensitiveFilter").checked;
+      const query = $("search").value.trim().toLowerCase();
+
+      if (stateValue && row.state !== stateValue) return false;
+      if (districtValue && row.district_office !== districtValue) return false;
+      if (typeValue && row.h2a_location_type !== typeValue) return false;
+      if (!includeSensitive && boolValue(row.sensitive_housing)) return false;
+      if (query && !haystack(row).includes(query)) return false;
+      return true;
+    }
+
+    function stateCampPasses(camp) {
+      if (!$("stateCampFilter").checked) return false;
+      const stateValue = $("stateFilter").value;
+      const linkValue = $("campLinkFilter").value;
+      const query = $("search").value.trim().toLowerCase();
+      if (stateValue && camp.program_state !== stateValue && camp.state !== stateValue) return false;
+      if (linkValue === "linked" && !confirmedCampLink(camp)) return false;
+      if (linkValue && linkValue !== "linked" && campCrosswalkStatus(camp) !== linkValue) return false;
+      if (query && !stateCampHaystack(camp).includes(query)) return false;
+      return camp._lat !== null && camp._lon !== null;
+    }
+
+    function matchRowPasses(row) {
+      const confidenceValue = $("confidenceFilter").value;
+      const maxDistance = Number($("distanceFilter").value);
+      const distance = numberValue(row.distance_km);
+
+      if (!baseRowPasses(row)) return false;
+      if (!hasLaundryCoordinates(row)) return false;
+      if (confidenceValue && row.laundromat_confidence !== confidenceValue && row.confidence !== confidenceValue) return false;
+      if (distance === null || distance > maxDistance) return false;
+      return true;
+    }
+
+    function buildModel(rows) {
+      model.sourceRows = rows.length;
+      model.statusCounts = new Map();
+      model.invalidCoordinateIds = new Set();
+      rows.forEach((row) => {
+        attachMapCoordinates(row);
+        if (row.location_id && hasRawPoint(row.h2a_lat, row.h2a_lon) && !hasH2aCoordinates(row)) {
+          model.invalidCoordinateIds.add(row.location_id);
+        }
+        const key = row.match_status || "unknown";
+        model.statusCounts.set(key, (model.statusCounts.get(key) || 0) + 1);
+      });
+
+      model.h2aRows = rows.filter(hasH2aCoordinates);
+      model.matchRows = model.h2aRows.filter(hasLaundryCoordinates);
+      model.rows = model.matchRows;
+
+      model.h2aRows.forEach((row) => {
+        const locId = row.location_id;
+
+        if (!model.locations.has(locId)) {
+          model.locations.set(locId, {
+            id: locId,
+            name: cleanName(row.h2a_entity_name, "H-2A location"),
+            agent: row.h2a_dba_or_agent,
+            type: row.h2a_location_type || "business",
+            address: row.h2a_address,
+            lat: row._h2aLat,
+            lon: row._h2aLon,
+            state: row.state,
+            district: row.district_office,
+            workers: numberValue(row.workers_certified) || 0,
+            crop: row.crop_activity,
+            period: row.employment_period,
+            cases: row.h2a_case_numbers,
+            source: row.h2a_source_url,
+            sensitive: boolValue(row.sensitive_housing),
+            rows: []
+          });
+        }
+        model.locations.get(locId).rows.push(row);
+      });
+
+      model.matchRows.forEach((row) => {
+        const locId = row.location_id;
+        const laundryId = row.laundromat_id;
+
+        if (!model.laundries.has(laundryId)) {
+          model.laundries.set(laundryId, {
+            id: laundryId,
+            name: cleanName(row.laundromat_name, "Unnamed laundry listing"),
+            address: row.laundromat_address,
+            lat: row._laundryLat,
+            lon: row._laundryLon,
+            hours: row.laundromat_hours,
+            phone: row.laundromat_phone,
+            source: row.source_url,
+            confidence: row.laundromat_confidence || row.confidence,
+            rows: [],
+            locationIds: new Set()
+          });
+        }
+        const laundry = model.laundries.get(laundryId);
+        laundry.rows.push(row);
+        laundry.locationIds.add(locId);
+      });
+    }
+
+    function buildStateCampModel(rows) {
+      model.stateCamps.clear();
+      rows.forEach((row) => {
+        const id = row.state_inspected_id || `${row.program_state || row.state}-${row.facility_name}-${row.full_address}`;
+        const point = normalizePoint(row.lat, row.lon);
+        const camp = {
+          ...row,
+          state_inspected_id: id,
+          _lat: point ? point.lat : null,
+          _lon: point ? point.lon : null
+        };
+        model.stateCamps.set(id, camp);
+      });
+    }
+
+    function buildCrosswalkModel(rows) {
+      model.crosswalkRows = rows;
+      model.crosswalkByCamp.clear();
+      model.crosswalkByLocation.clear();
+
+      rows.forEach((row) => {
+        if (!row.state_inspected_id) return;
+        model.crosswalkByCamp.set(row.state_inspected_id, row);
+        const camp = model.stateCamps.get(row.state_inspected_id);
+        if (camp) camp.crosswalk = row;
+
+        if (row.h2a_location_id) {
+          if (!model.crosswalkByLocation.has(row.h2a_location_id)) {
+            model.crosswalkByLocation.set(row.h2a_location_id, []);
+          }
+          model.crosswalkByLocation.get(row.h2a_location_id).push(row);
+        }
+      });
+    }
+
+    function populateFilters() {
+      const states = uniqueSorted(model.h2aRows.map((row) => row.state));
+      const districts = uniqueSorted(model.h2aRows.map((row) => row.district_office));
+
+      $("stateFilter").innerHTML = `<option value="">All states</option>${states.map((state) => `<option value="${escapeHtml(state)}">${escapeHtml(state)}</option>`).join("")}`;
+      $("districtFilter").innerHTML = `<option value="">All districts</option>${districts.map((district) => `<option value="${escapeHtml(district)}">${escapeHtml(district)}</option>`).join("")}`;
+    }
+
+    function markerRadius(workers) {
+      const n = Math.max(0, Number(workers) || 0);
+      return Math.max(4, Math.min(12, 4 + Math.sqrt(n) * 0.45));
+    }
+
+    function createMarkers() {
+      model.locations.forEach((loc) => {
+        const hasMatch = loc.rows.some(hasLaundryCoordinates);
+        const marker = L.circleMarker([loc.lat, loc.lon], {
+          renderer: canvasRenderer,
+          radius: markerRadius(loc.workers),
+          color: hasMatch ? "#ffffff" : "#6b7280",
+          weight: 1.5,
+          fillColor: typeColor(loc.type),
+          fillOpacity: hasMatch ? (loc.sensitive ? 0.78 : 0.66) : 0.28
+        });
+
+        marker.bindTooltip(locationTooltip(loc), {
+          className: "name-tooltip",
+          direction: "top",
+          offset: [0, -8],
+          opacity: 1,
+          sticky: true
+        });
+        marker.bindPopup(locationPopup(loc));
+        marker.on("click", () => selectLocation(loc.id));
+        model.locationMarkers.set(loc.id, marker);
+      });
+
+      model.laundries.forEach((laundry) => {
+        const marker = L.circleMarker([laundry.lat, laundry.lon], {
+          renderer: canvasRenderer,
+          radius: 7,
+          color: "#442700",
+          weight: 1.2,
+          fillColor: colors.laundry,
+          fillOpacity: 0.84
+        });
+
+        marker.bindTooltip(laundryTooltip(laundry), {
+          className: "name-tooltip",
+          direction: "top",
+          offset: [0, -8],
+          opacity: 1,
+          sticky: true
+        });
+        marker.bindPopup(laundryPopup(laundry));
+        marker.on("click", () => selectLaundry(laundry.id));
+        model.laundryMarkers.set(laundry.id, marker);
+      });
+
+      model.stateCamps.forEach((camp) => {
+        if (camp._lat === null || camp._lon === null) return;
+        const linked = confirmedCampLink(camp);
+        const marker = L.circleMarker([camp._lat, camp._lon], {
+          renderer: canvasRenderer,
+          radius: linked ? 11 : 9,
+          color: linked ? "#111827" : "#ffffff",
+          weight: linked ? 2.4 : 1.7,
+          fillColor: colors.stateCamp,
+          fillOpacity: 0.82
+        });
+
+        marker.bindTooltip(stateCampTooltip(camp), {
+          className: "name-tooltip",
+          direction: "top",
+          offset: [0, -9],
+          opacity: 1,
+          sticky: true
+        });
+        marker.bindPopup(stateCampPopup(camp));
+        marker.on("click", () => selectStateCamp(camp.state_inspected_id));
+        model.stateCampMarkers.set(camp.state_inspected_id, marker);
+      });
+    }
+
+    function locationPopup(loc) {
+      const nearest = loc.rows
+        .filter((row) => hasLaundryCoordinates(row) && numberValue(row.distance_km) !== null)
+        .slice()
+        .sort((a, b) => Number(a.distance_km) - Number(b.distance_km))[0];
+
+      return `
+        <div class="popup-title">${escapeHtml(loc.name)}</div>
+        <div class="popup-meta">
+          ${escapeHtml(loc.type || "location")} | ${escapeHtml(loc.district)} | ${escapeHtml(loc.state)}<br>
+          ${escapeHtml(loc.address || "No address")}<br>
+          Workers: ${formatInt(loc.workers)}${loc.sensitive ? "<br><b>Sensitive housing row</b>" : ""}<br>
+          Nearest laundry: ${escapeHtml(nearest ? cleanName(nearest.laundromat_name, "Unnamed laundry listing") : "No laundromat within radius")}
+          ${nearest ? ` (${formatKm(nearest.distance_km)})` : ""}
+        </div>
+      `;
+    }
+
+    function locationTooltip(loc) {
+      return `
+        ${escapeHtml(loc.name)}
+        <span class="tooltip-meta">${escapeHtml(loc.type || "location")} | ${escapeHtml(loc.state)} | ${formatInt(loc.workers)} workers</span>
+      `;
+    }
+
+    function laundryPopup(laundry) {
+      return `
+        <div class="popup-title">${escapeHtml(laundry.name)}</div>
+        <div class="popup-meta">
+          ${escapeHtml(laundry.address || "No address")}<br>
+          ${laundry.hours ? `Hours: ${escapeHtml(laundry.hours)}<br>` : ""}
+          ${laundry.phone ? `Phone: ${escapeHtml(laundry.phone)}<br>` : ""}
+          Confidence: ${escapeHtml(laundry.confidence || "--")}<br>
+          Linked H-2A locations: ${formatInt(laundry.locationIds.size)}
+        </div>
+      `;
+    }
+
+    function laundryTooltip(laundry) {
+      return `
+        ${escapeHtml(laundry.name)}
+        <span class="tooltip-meta">${formatInt(laundry.locationIds.size)} linked H-2A locations</span>
+      `;
+    }
+
+    function stateCampPopup(camp) {
+      const crosswalk = camp.crosswalk;
+      return `
+        <div class="popup-title">${escapeHtml(camp.facility_name || "State-inspected camp")}</div>
+        <div class="popup-meta">
+          ${escapeHtml(camp.full_address || "No address")}<br>
+          Program: ${escapeHtml(camp.program_name || "--")}<br>
+          ${camp.operator_name ? `Operator: ${escapeHtml(camp.operator_name)}<br>` : ""}
+          ${camp.county ? `County: ${escapeHtml(camp.county)}<br>` : ""}
+          ${camp.license_or_permit_id ? `Permit/license: ${escapeHtml(camp.license_or_permit_id)}<br>` : ""}
+          ${camp.status ? `Status: ${escapeHtml(camp.status)}<br>` : ""}
+          ${camp.expiration_date ? `Expiration: ${escapeHtml(camp.expiration_date)}<br>` : ""}
+          Crosswalk: ${escapeHtml(crosswalk?.match_status || "unmatched")}<br>
+          ${crosswalk?.h2a_entity_name ? `Local H-2A entity: ${escapeHtml(crosswalk.h2a_entity_name)}<br>` : ""}
+          ${camp.source_url ? `<a href="${escapeHtml(camp.source_url)}" target="_blank" rel="noopener">Open state source</a>` : ""}
+        </div>
+      `;
+    }
+
+    function stateCampTooltip(camp) {
+      return `
+        ${escapeHtml(camp.facility_name || "State-inspected camp")}
+        <span class="tooltip-meta">${escapeHtml(camp.program_state || camp.state || "--")} state-inspected housing | ${escapeHtml(campCrosswalkStatus(camp))}</span>
+      `;
+    }
+
+    function applyFilters(options = {}) {
+      model.filteredLocationRows = model.h2aRows.filter(baseRowPasses);
+      model.filteredRows = model.matchRows.filter(matchRowPasses);
+      model.filteredLocationIds = new Set(model.filteredLocationRows.map((row) => row.location_id));
+      model.filteredLaundryIds = new Set(model.filteredRows.map((row) => row.laundromat_id));
+      model.filteredStateCampIds = new Set(
+        Array.from(model.stateCamps.values())
+          .filter(stateCampPasses)
+          .map((camp) => camp.state_inspected_id)
+      );
+
+      renderLayers();
+      updateMetrics();
+      updateOverviewList();
+      writeHash();
+
+      if (options.fit) {
+        fitFilteredBounds();
+      }
+    }
+
+    function renderLayers() {
+      h2aLayer.clearLayers();
+      laundryLayer.clearLayers();
+      stateCampLayer.clearLayers();
+      lineLayer.clearLayers();
+
+      model.filteredLocationIds.forEach((id) => {
+        const marker = model.locationMarkers.get(id);
+        if (marker) marker.addTo(h2aLayer);
+      });
+
+      const laundryCounts = new Map();
+      model.filteredRows.forEach((row) => {
+        if (!laundryCounts.has(row.laundromat_id)) laundryCounts.set(row.laundromat_id, new Set());
+        laundryCounts.get(row.laundromat_id).add(row.location_id);
+      });
+
+      model.filteredLaundryIds.forEach((id) => {
+        const marker = model.laundryMarkers.get(id);
+        const count = laundryCounts.get(id)?.size || 1;
+        if (marker) {
+          marker.setRadius(Math.max(6, Math.min(15, 5 + Math.sqrt(count) * 1.2)));
+          marker.addTo(laundryLayer);
+        }
+      });
+
+      model.filteredStateCampIds.forEach((id) => {
+        const marker = model.stateCampMarkers.get(id);
+        if (marker) marker.addTo(stateCampLayer);
+      });
+    }
+
+    function updateMetrics() {
+      const locations = model.filteredLocationIds.size;
+      const laundries = model.filteredLaundryIds.size;
+      const matches = model.filteredRows.length;
+      const stateCamps = model.filteredStateCampIds.size;
+      const confirmedLinks = Array.from(model.filteredStateCampIds)
+        .map((id) => model.stateCamps.get(id))
+        .filter((camp) => camp && confirmedCampLink(camp)).length;
+
+      const nearestByLocation = new Map();
+      model.filteredRows.forEach((row) => {
+        const distance = numberValue(row.distance_km);
+        if (distance === null) return;
+        const current = nearestByLocation.get(row.location_id);
+        if (current === undefined || distance < current) nearestByLocation.set(row.location_id, distance);
+      });
+      const nearestValues = Array.from(nearestByLocation.values());
+      const avg = nearestValues.length
+        ? nearestValues.reduce((sum, value) => sum + value, 0) / nearestValues.length
+        : null;
+
+      $("metricLocations").textContent = formatInt(locations);
+      $("metricLaundries").textContent = formatInt(laundries);
+      $("metricMatches").textContent = formatInt(matches);
+      $("metricStateCamps").textContent = formatInt(stateCamps);
+      $("metricCrosswalk").textContent = formatInt(confirmedLinks);
+      $("metricDistance").textContent = avg === null ? "--" : avg.toFixed(2);
+      $("distanceLabel").textContent = `${Number($("distanceFilter").value).toFixed(1)} km`;
+      $("status").textContent = `${formatInt(locations)} H-2A locations, ${formatInt(laundries)} laundromats, ${formatInt(matches)} laundry matches, ${formatInt(stateCamps)} state-inspected camps, and ${formatInt(confirmedLinks)} confirmed camp links shown.`;
+
+      const noLaundryRows = model.statusCounts.get("no_laundromat_within_radius") || 0;
+      const unresolvedRows = model.statusCounts.get("unresolved_h2a_location") || 0;
+      const invalidCoordinateLocations = model.invalidCoordinateIds.size;
+      const plottableStateCamps = Array.from(model.stateCamps.values()).filter((camp) => camp._lat !== null && camp._lon !== null).length;
+      const allConfirmedLinks = model.crosswalkRows.filter((row) => ["same_site", "same_operator"].includes(row.match_status)).length;
+      const candidateLinks = model.crosswalkRows.filter((row) => row.match_status === "candidate_review").length;
+      const unmatchedCamps = model.crosswalkRows.filter((row) => row.match_status === "unmatched").length;
+      $("dataCoverage").textContent = `${formatInt(model.sourceRows)} proximity rows. ${formatInt(model.locations.size)} H-2A locations have map coordinates; ${formatInt(model.matchRows.length)} rows have mapped laundry matches. ${formatInt(noLaundryRows)} rows have no laundromat within 8 km; ${formatInt(unresolvedRows)} rows have unresolved H-2A coordinates; ${formatInt(invalidCoordinateLocations)} coordinate anomalies are outside Midwest bounds. The Illinois state layer has ${formatInt(model.stateCamps.size)} records (${formatInt(plottableStateCamps)} plottable): ${formatInt(allConfirmedLinks)} confirmed crosswalk link, ${formatInt(candidateLinks)} review candidates, and ${formatInt(unmatchedCamps)} unmatched records.`;
+    }
+
+    function updateOverviewList() {
+      $("detailTitle").textContent = "Laundry matches";
+
+      if (!model.filteredRows.length) {
+        $("detail").innerHTML = `<p class="empty">No matches for the current filters.</p>`;
+        return;
+      }
+
+      const byLaundry = new Map();
+      model.filteredRows.forEach((row) => {
+        if (!byLaundry.has(row.laundromat_id)) {
+          byLaundry.set(row.laundromat_id, {
+            laundry: model.laundries.get(row.laundromat_id),
+            rows: [],
+            locationIds: new Set(),
+            nearest: Infinity
+          });
+        }
+        const item = byLaundry.get(row.laundromat_id);
+        item.rows.push(row);
+        item.locationIds.add(row.location_id);
+        const distance = numberValue(row.distance_km);
+        if (distance !== null) item.nearest = Math.min(item.nearest, distance);
+      });
+
+      const top = Array.from(byLaundry.values())
+        .sort((a, b) => b.locationIds.size - a.locationIds.size || a.nearest - b.nearest)
+        .slice(0, 10);
+
+      $("detail").innerHTML = `
+        <p class="note">Top laundromats by linked H-2A locations in the current view.</p>
+        <div class="match-list">
+          ${top.map((item) => {
+            const laundry = item.laundry;
+            return `
+              <div class="match-item">
+                <div class="match-title">
+                  <span>${escapeHtml(laundry.name)}</span>
+                  <span class="pill">${formatInt(item.locationIds.size)} loc.</span>
+                </div>
+                <div class="kv">
+                  <div>${escapeHtml(laundry.address || "No address")}</div>
+                  <div><b>Nearest:</b> ${formatKm(item.nearest)} <b>Confidence:</b> ${escapeHtml(laundry.confidence || "--")}</div>
+                  ${laundry.phone ? `<div><b>Phone:</b> ${escapeHtml(laundry.phone)}</div>` : ""}
+                  ${laundry.hours ? `<div><b>Hours:</b> ${escapeHtml(laundry.hours)}</div>` : ""}
+                  ${laundry.source ? `<div><a href="${escapeHtml(laundry.source)}" target="_blank" rel="noopener">Open source</a></div>` : ""}
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
+
+    function filteredRowsForLocation(locationId) {
+      return model.filteredRows
+        .filter((row) => row.location_id === locationId)
+        .sort((a, b) => Number(a.distance_km) - Number(b.distance_km));
+    }
+
+    function filteredRowsForLaundry(laundryId) {
+      return model.filteredRows
+        .filter((row) => row.laundromat_id === laundryId)
+        .sort((a, b) => Number(a.distance_km) - Number(b.distance_km));
+    }
+
+    function selectLocation(locationId) {
+      const loc = model.locations.get(locationId);
+      const rows = filteredRowsForLocation(locationId);
+      const campLinks = model.crosswalkByLocation.get(locationId) || [];
+      lineLayer.clearLayers();
+
+      rows.forEach((row) => {
+        L.polyline(
+          [[row._h2aLat, row._h2aLon], [row._laundryLat, row._laundryLon]],
+          { color: colors.laundry, weight: 2, opacity: 0.72 }
+        ).addTo(lineLayer);
+      });
+
+      campLinks.forEach((crosswalk) => {
+        const camp = model.stateCamps.get(crosswalk.state_inspected_id);
+        if (!camp || camp._lat === null || camp._lon === null) return;
+        L.polyline(
+          [[loc.lat, loc.lon], [camp._lat, camp._lon]],
+          { color: colors.stateCamp, weight: 2.5, opacity: 0.8, dashArray: "6 5" }
+        ).addTo(lineLayer);
+      });
+
+      $("detailTitle").textContent = loc.name;
+      $("detail").innerHTML = `
+        <div class="kv">
+          <div><b>Type:</b> ${escapeHtml(loc.type)} <b>District:</b> ${escapeHtml(loc.district)} <b>State:</b> ${escapeHtml(loc.state)}</div>
+          <div><b>Address:</b> ${escapeHtml(loc.address || "No address")}</div>
+          <div><b>Workers:</b> ${formatInt(loc.workers)} ${loc.sensitive ? '<span class="pill">Sensitive housing</span>' : ""}</div>
+          ${loc.period ? `<div><b>Employment:</b> ${escapeHtml(loc.period)}</div>` : ""}
+          ${loc.crop ? `<div><b>Activity:</b> ${escapeHtml(loc.crop)}</div>` : ""}
+          ${loc.source ? `<div><a href="${escapeHtml(loc.source)}" target="_blank" rel="noopener">Open H-2A source</a></div>` : ""}
+        </div>
+        <h3>Nearby laundries</h3>
+        <div class="match-list">
+          ${rows.map((row) => laundryMatchItem(row)).join("") || '<p class="empty">No visible laundry matches under the current filters.</p>'}
+        </div>
+        ${campLinks.length ? `
+          <h3>State camp crosswalk</h3>
+          <div class="match-list">
+            ${campLinks.map((crosswalk) => `
+              <div class="match-item">
+                <div class="match-title">
+                  <span>${escapeHtml(crosswalk.state_facility_name || "State-inspected camp")}</span>
+                  <span class="pill">${escapeHtml(crosswalk.match_status)}</span>
+                </div>
+                <div class="kv">
+                  <div>${escapeHtml(crosswalk.state_camp_address || "No state camp address")}</div>
+                  <div><b>Basis:</b> ${escapeHtml(crosswalk.match_basis || "--")}</div>
+                  <div>${escapeHtml(crosswalk.review_note || "")}</div>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        ` : ""}
+      `;
+    }
+
+    function selectLaundry(laundryId) {
+      const laundry = model.laundries.get(laundryId);
+      const rows = filteredRowsForLaundry(laundryId);
+      lineLayer.clearLayers();
+
+      rows.slice(0, 80).forEach((row) => {
+        L.polyline(
+          [[row._h2aLat, row._h2aLon], [row._laundryLat, row._laundryLon]],
+          { color: colors.laundry, weight: 1.4, opacity: 0.44 }
+        ).addTo(lineLayer);
+      });
+
+      const uniqueLocations = new Set(rows.map((row) => row.location_id));
+      $("detailTitle").textContent = laundry.name;
+      $("detail").innerHTML = `
+        <div class="kv">
+          <div><b>Address:</b> ${escapeHtml(laundry.address || "No address")}</div>
+          ${laundry.hours ? `<div><b>Hours:</b> ${escapeHtml(laundry.hours)}</div>` : ""}
+          ${laundry.phone ? `<div><b>Phone:</b> ${escapeHtml(laundry.phone)}</div>` : ""}
+          <div><b>Confidence:</b> ${escapeHtml(laundry.confidence || "--")} <b>Linked locations:</b> ${formatInt(uniqueLocations.size)}</div>
+          ${laundry.source ? `<div><a href="${escapeHtml(laundry.source)}" target="_blank" rel="noopener">Open source</a></div>` : ""}
+        </div>
+        <h3>Closest H-2A locations</h3>
+        <div class="match-list">
+          ${rows.slice(0, 20).map((row) => locationMatchItem(row)).join("") || '<p class="empty">No visible H-2A locations under the current filters.</p>'}
+        </div>
+      `;
+    }
+
+    function selectStateCamp(campId) {
+      const camp = model.stateCamps.get(campId);
+      if (!camp) return;
+      const crosswalk = camp.crosswalk;
+      const linkedLocation = crosswalk?.h2a_location_id
+        ? model.locations.get(crosswalk.h2a_location_id)
+        : null;
+      lineLayer.clearLayers();
+
+      if (linkedLocation && camp._lat !== null && camp._lon !== null) {
+        L.polyline(
+          [[camp._lat, camp._lon], [linkedLocation.lat, linkedLocation.lon]],
+          { color: colors.stateCamp, weight: 2.5, opacity: 0.8, dashArray: "6 5" }
+        ).addTo(lineLayer);
+      }
+
+      $("detailTitle").textContent = camp.facility_name || "State-inspected camp";
+      $("detail").innerHTML = `
+        <div class="kv">
+          <div><b>Layer:</b> State-inspected migrant/agricultural labor camp</div>
+          <div><b>Program:</b> ${escapeHtml(camp.program_name || "--")}</div>
+          <div><b>Address:</b> ${escapeHtml(camp.full_address || "No address")}</div>
+          ${camp.operator_name ? `<div><b>Operator:</b> ${escapeHtml(camp.operator_name)}</div>` : ""}
+          ${camp.county ? `<div><b>County:</b> ${escapeHtml(camp.county)}</div>` : ""}
+          ${camp.license_or_permit_id ? `<div><b>Permit/license:</b> ${escapeHtml(camp.license_or_permit_id)}</div>` : ""}
+          ${camp.status ? `<div><b>Status:</b> ${escapeHtml(camp.status)}</div>` : ""}
+          ${camp.expiration_date ? `<div><b>Expiration:</b> ${escapeHtml(camp.expiration_date)}</div>` : ""}
+          ${camp.geocode_source ? `<div><b>Geocode:</b> ${escapeHtml(camp.geocode_source)}</div>` : ""}
+          ${camp.coverage_note ? `<div><b>Source note:</b> ${escapeHtml(camp.coverage_note)}</div>` : ""}
+          ${camp.source_url ? `<div><a href="${escapeHtml(camp.source_url)}" target="_blank" rel="noopener">Open state source</a></div>` : ""}
+        </div>
+        <h3>Local H-2A housing crosswalk</h3>
+        <div class="match-list">
+          <div class="match-item">
+            <div class="match-title">
+              <span>${escapeHtml(crosswalk?.h2a_entity_name || "No linked local H-2A housing record")}</span>
+              <span class="pill">${escapeHtml(crosswalk?.match_status || "unmatched")}</span>
+            </div>
+            <div class="kv">
+              ${crosswalk?.h2a_address ? `<div><b>H-2A address:</b> ${escapeHtml(crosswalk.h2a_address)}</div>` : ""}
+              ${crosswalk?.h2a_case_numbers ? `<div><b>Case:</b> ${escapeHtml(crosswalk.h2a_case_numbers)}</div>` : ""}
+              ${crosswalk?.match_basis ? `<div><b>Basis:</b> ${escapeHtml(crosswalk.match_basis)}</div>` : ""}
+              ${crosswalk?.distance_km ? `<div><b>Site distance:</b> ${formatKm(crosswalk.distance_km)}</div>` : ""}
+              <div>${escapeHtml(crosswalk?.review_note || "No crosswalk row was loaded for this state camp.")}</div>
+              ${crosswalk?.h2a_source_url ? `<div><a href="${escapeHtml(crosswalk.h2a_source_url)}" target="_blank" rel="noopener">Open local H-2A source</a></div>` : ""}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function laundryMatchItem(row) {
+      return `
+        <div class="match-item">
+          <div class="match-title">
+            <span>${escapeHtml(cleanName(row.laundromat_name, "Unnamed laundry listing"))}</span>
+            <span class="pill">${formatKm(row.distance_km)}</span>
+          </div>
+          <div class="kv">
+            <div>${escapeHtml(row.laundromat_address || row.laundromat_state_query || "No address")}</div>
+            ${row.laundromat_hours ? `<div><b>Hours:</b> ${escapeHtml(row.laundromat_hours)}</div>` : ""}
+            ${row.laundromat_phone ? `<div><b>Phone:</b> ${escapeHtml(row.laundromat_phone)}</div>` : ""}
+            <div><b>Confidence:</b> ${escapeHtml(row.laundromat_confidence || row.confidence || "--")}</div>
+            ${row.source_url ? `<div><a href="${escapeHtml(row.source_url)}" target="_blank" rel="noopener">Open source</a></div>` : ""}
+          </div>
+        </div>
+      `;
+    }
+
+    function locationMatchItem(row) {
+      return `
+        <div class="match-item">
+          <div class="match-title">
+            <span>${escapeHtml(cleanName(row.h2a_entity_name, "H-2A location"))}</span>
+            <span class="pill">${formatKm(row.distance_km)}</span>
+          </div>
+          <div class="kv">
+            <div>${escapeHtml(row.h2a_address || "No address")}</div>
+            <div><b>Type:</b> ${escapeHtml(row.h2a_location_type || "--")} <b>Workers:</b> ${formatInt(numberValue(row.workers_certified) || 0)}</div>
+            ${boolValue(row.sensitive_housing) ? '<div><span class="pill">Sensitive housing</span></div>' : ""}
+          </div>
+        </div>
+      `;
+    }
+
+    function fitFilteredBounds() {
+      const coords = [];
+      model.filteredLocationIds.forEach((id) => {
+        const loc = model.locations.get(id);
+        if (loc) coords.push([loc.lat, loc.lon]);
+      });
+      model.filteredLaundryIds.forEach((id) => {
+        const laundry = model.laundries.get(id);
+        if (laundry) coords.push([laundry.lat, laundry.lon]);
+      });
+      model.filteredStateCampIds.forEach((id) => {
+        const camp = model.stateCamps.get(id);
+        if (camp && camp._lat !== null && camp._lon !== null) coords.push([camp._lat, camp._lon]);
+      });
+      if (!coords.length) return;
+      map.fitBounds(L.latLngBounds(coords), { padding: [26, 26], maxZoom: 11 });
+    }
+
+    function resetFilters() {
+      $("search").value = "";
+      $("stateFilter").value = "";
+      $("districtFilter").value = "";
+      $("typeFilter").value = "";
+      $("confidenceFilter").value = "";
+      $("campLinkFilter").value = "";
+      $("distanceFilter").value = "8";
+      $("sensitiveFilter").checked = true;
+      $("stateCampFilter").checked = true;
+      applyFilters({ fit: true });
+    }
+
+    function writeHash() {
+      const params = new URLSearchParams();
+      const fields = {
+        q: $("search").value.trim(),
+        state: $("stateFilter").value,
+        district: $("districtFilter").value,
+        type: $("typeFilter").value,
+        confidence: $("confidenceFilter").value,
+        campLink: $("campLinkFilter").value,
+        maxKm: $("distanceFilter").value,
+        sensitive: $("sensitiveFilter").checked ? "1" : "0",
+        stateCamps: $("stateCampFilter").checked ? "1" : "0"
+      };
+      Object.entries(fields).forEach(([key, value]) => {
+        if (value && !(key === "maxKm" && value === "8") && !(key === "sensitive" && value === "1") && !(key === "stateCamps" && value === "1")) {
+          params.set(key, value);
+        }
+      });
+      const hash = params.toString();
+      history.replaceState(null, "", hash ? `#${hash}` : location.pathname);
+    }
+
+    function readHash() {
+      const params = new URLSearchParams(location.hash.replace(/^#/, ""));
+      if (params.has("q")) $("search").value = params.get("q");
+      if (params.has("state")) $("stateFilter").value = params.get("state");
+      if (params.has("district")) $("districtFilter").value = params.get("district");
+      if (params.has("type")) $("typeFilter").value = params.get("type");
+      if (params.has("confidence")) $("confidenceFilter").value = params.get("confidence");
+      if (params.has("campLink")) $("campLinkFilter").value = params.get("campLink");
+      if (params.has("maxKm")) $("distanceFilter").value = params.get("maxKm");
+      if (params.has("sensitive")) $("sensitiveFilter").checked = params.get("sensitive") !== "0";
+      if (params.has("stateCamps")) $("stateCampFilter").checked = params.get("stateCamps") !== "0";
+    }
+
+    ["search", "stateFilter", "districtFilter", "typeFilter", "confidenceFilter", "campLinkFilter", "distanceFilter", "sensitiveFilter", "stateCampFilter"].forEach((id) => {
+      $(id).addEventListener("input", () => applyFilters());
+      $(id).addEventListener("change", () => applyFilters());
+    });
+
+    $("resetFilters").addEventListener("click", resetFilters);
+    $("fitFiltered").addEventListener("click", fitFilteredBounds);
+
+    function parseCsv(url, required = true) {
+      return new Promise((resolve, reject) => {
+        Papa.parse(url, {
+          download: true,
+          header: true,
+          skipEmptyLines: true,
+          complete: (result) => resolve(result.data),
+          error: (error) => {
+            if (required) reject(error);
+            else resolve([]);
+          }
+        });
+      });
+    }
+
+    async function init() {
+      try {
+        const [proximityRows, stateCampRows, crosswalkRows] = await Promise.all([
+          parseCsv(CSV_URL, true),
+          parseCsv(STATE_CAMPS_CSV_URL, false),
+          parseCsv(CAMP_CROSSWALK_CSV_URL, false)
+        ]);
+        buildModel(proximityRows);
+        buildStateCampModel(stateCampRows);
+        buildCrosswalkModel(crosswalkRows);
+        populateFilters();
+        readHash();
+        createMarkers();
+        applyFilters({ fit: true });
+      } catch (error) {
+        $("status").textContent = `Could not load ${CSV_URL}: ${error.message}`;
+        $("detail").innerHTML = `<p class="empty">Could not load map data. Serve this folder over HTTP so the browser can fetch the CSV.</p>`;
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
