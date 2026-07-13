@@ -15,10 +15,15 @@
       --line: #d8ded9;
       --accent: #0f766e;
       --laundry: #d97706;
+      --laundry-border: #b45309;
       --state-camp: #7c3aed;
+      --state-camp-border: #6d28d9;
       --business: #2563eb;
+      --business-border: #1d4ed8;
       --worksite: #0f766e;
+      --worksite-border: #0b5f59;
       --housing: #b91c1c;
+      --housing-border: #991b1b;
       --focus: #111827;
       --soft: #eef3ef;
     }
@@ -637,7 +642,12 @@
       worksite: getComputedStyle(document.documentElement).getPropertyValue("--worksite").trim(),
       housing: getComputedStyle(document.documentElement).getPropertyValue("--housing").trim(),
       laundry: getComputedStyle(document.documentElement).getPropertyValue("--laundry").trim(),
-      stateCamp: getComputedStyle(document.documentElement).getPropertyValue("--state-camp").trim()
+      stateCamp: getComputedStyle(document.documentElement).getPropertyValue("--state-camp").trim(),
+      businessBorder: getComputedStyle(document.documentElement).getPropertyValue("--business-border").trim(),
+      worksiteBorder: getComputedStyle(document.documentElement).getPropertyValue("--worksite-border").trim(),
+      housingBorder: getComputedStyle(document.documentElement).getPropertyValue("--housing-border").trim(),
+      laundryBorder: getComputedStyle(document.documentElement).getPropertyValue("--laundry-border").trim(),
+      stateCampBorder: getComputedStyle(document.documentElement).getPropertyValue("--state-camp-border").trim()
     };
 
     const hoverState = {
@@ -716,6 +726,12 @@
       if (type === "housing") return colors.housing;
       if (type === "worksite") return colors.worksite;
       return colors.business;
+    }
+
+    function typeBorderColor(type) {
+      if (type === "housing") return colors.housingBorder;
+      if (type === "worksite") return colors.worksiteBorder;
+      return colors.businessBorder;
     }
 
     function cleanName(value, fallback) {
@@ -942,7 +958,7 @@
 
     function markerRadius(workers) {
       const n = Math.max(0, Number(workers) || 0);
-      return Math.max(4, Math.min(12, 4 + Math.sqrt(n) * 0.45));
+      return Math.max(6, Math.min(12, 4 + Math.sqrt(n) * 0.45));
     }
 
     function createMarkers() {
@@ -951,8 +967,9 @@
         const marker = L.circleMarker([loc.lat, loc.lon], {
           renderer: canvasRenderer,
           radius: markerRadius(loc.workers),
-          color: hasMatch ? "#ffffff" : "#6b7280",
-          weight: 1.5,
+          color: typeBorderColor(loc.type),
+          weight: 1.35,
+          opacity: hasMatch ? 0.9 : 0.55,
           fillColor: typeColor(loc.type),
           fillOpacity: hasMatch ? (loc.sensitive ? 0.78 : 0.66) : 0.28
         });
@@ -965,11 +982,11 @@
       model.laundries.forEach((laundry) => {
         const marker = L.circleMarker([laundry.lat, laundry.lon], {
           renderer: canvasRenderer,
-          radius: 7,
-          color: "#442700",
-          weight: 1.2,
+          radius: 4,
+          color: colors.laundryBorder,
+          weight: 1.1,
           fillColor: colors.laundry,
-          fillOpacity: 0.84
+          fillOpacity: 0.92
         });
 
         marker.bindPopup(laundryPopup(laundry));
@@ -983,8 +1000,8 @@
         const marker = L.circleMarker([camp._lat, camp._lon], {
           renderer: canvasRenderer,
           radius: linked ? 11 : 9,
-          color: linked ? "#111827" : "#ffffff",
-          weight: linked ? 2.4 : 1.7,
+          color: colors.stateCampBorder,
+          weight: linked ? 2.4 : 1.5,
           fillColor: colors.stateCamp,
           fillOpacity: 0.82
         });
@@ -1214,7 +1231,7 @@
         const marker = model.laundryMarkers.get(id);
         const count = laundryCounts.get(id)?.size || 1;
         if (marker) {
-          marker.setRadius(Math.max(6, Math.min(15, 5 + Math.sqrt(count) * 1.2)));
+          marker.setRadius(Math.max(3.5, Math.min(5, 3.2 + Math.sqrt(count) * 0.35)));
           marker.addTo(laundryLayer);
         }
       });
