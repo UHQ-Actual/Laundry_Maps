@@ -364,25 +364,57 @@
 
     .name-tooltip {
       border: 1px solid rgba(17, 24, 39, 0.2);
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.96);
+      border-radius: 9px;
+      background: rgba(255, 255, 255, 0.98);
       color: var(--focus);
-      box-shadow: 0 4px 14px rgba(17, 24, 39, 0.16);
+      box-shadow: 0 8px 24px rgba(17, 24, 39, 0.18);
+      box-sizing: border-box;
+      font-family: Arial, Helvetica, sans-serif;
       font-size: 12px;
+      font-weight: 400;
+      line-height: 1.35;
+      padding: 9px 11px;
+      overflow-wrap: anywhere;
+    }
+
+    .tooltip-title {
+      color: var(--focus);
+      font-size: 13px;
       font-weight: 700;
       line-height: 1.25;
-      padding: 5px 7px;
+    }
+
+    .tooltip-facts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px 0;
+      margin-top: 5px;
+      color: #33413a;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .tooltip-fact {
+      white-space: nowrap;
+    }
+
+    .tooltip-fact + .tooltip-fact::before {
+      content: "\2022";
+      margin: 0 6px;
+      color: #9aa49e;
     }
 
     .name-tooltip .tooltip-meta {
       display: block;
-      margin-top: 2px;
+      margin-top: 5px;
       color: var(--muted);
       font-size: 11px;
       font-weight: 400;
+      line-height: 1.35;
     }
 
     .hover-tooltip {
+      width: min(320px, calc(100vw - 40px));
       max-width: min(360px, calc(100vw - 32px));
       pointer-events: none;
       white-space: normal;
@@ -398,9 +430,9 @@
     }
 
     .hover-item + .hover-item {
-      margin-top: 6px;
+      margin-top: 9px;
       border-top: 1px solid var(--line);
-      padding-top: 6px;
+      padding-top: 9px;
     }
 
     .hover-more {
@@ -983,8 +1015,12 @@
 
     function locationTooltip(loc) {
       return `
-        ${escapeHtml(loc.name)}
-        <span class="tooltip-meta">${escapeHtml(loc.type || "location")} | ${escapeHtml(loc.state)} | ${formatInt(loc.workers)} workers</span>
+        <div class="tooltip-title">${escapeHtml(loc.name)}</div>
+        <div class="tooltip-facts">
+          <span class="tooltip-fact">${escapeHtml(loc.type || "Location")}</span>
+          <span class="tooltip-fact">${escapeHtml(loc.state)}</span>
+          <span class="tooltip-fact">${formatInt(loc.workers)} workers</span>
+        </div>
         <span class="tooltip-meta">${escapeHtml(loc.address || "No address")}</span>
       `;
     }
@@ -1004,8 +1040,11 @@
 
     function laundryTooltip(laundry) {
       return `
-        ${escapeHtml(laundry.name)}
-        <span class="tooltip-meta">${formatInt(laundry.locationIds.size)} linked H-2A locations</span>
+        <div class="tooltip-title">${escapeHtml(laundry.name)}</div>
+        <div class="tooltip-facts">
+          <span class="tooltip-fact">Laundry</span>
+          <span class="tooltip-fact">${formatInt(laundry.locationIds.size)} linked H-2A locations</span>
+        </div>
         <span class="tooltip-meta">${escapeHtml(laundry.address || "No address")}</span>
       `;
     }
@@ -1034,8 +1073,11 @@
 
     function stateCampTooltip(camp) {
       return `
-        ${escapeHtml(camp.facility_name || "State-inspected camp")}
-        <span class="tooltip-meta">${escapeHtml(camp.program_state || camp.state || "--")} state-inspected housing | ${escapeHtml(campCrosswalkStatus(camp))}</span>
+        <div class="tooltip-title">${escapeHtml(camp.facility_name || "State-inspected camp")}</div>
+        <div class="tooltip-facts">
+          <span class="tooltip-fact">${escapeHtml(camp.program_state || camp.state || "--")} state-inspected housing</span>
+          <span class="tooltip-fact">${escapeHtml(campCrosswalkStatus(camp))}</span>
+        </div>
         <span class="tooltip-meta">${escapeHtml(camp.full_address || "No address")}</span>
       `;
     }
@@ -1098,13 +1140,25 @@
 
       const priority = { camp: 0, location: 1, laundry: 2 };
       candidates.sort((a, b) => a.distance - b.distance || priority[a.kind] - priority[b.kind]);
-      const visible = candidates.slice(0, 6);
+      const visible = candidates.slice(0, 4);
       const countLabel = candidates.length === 1 ? "1 point" : `${candidates.length} overlapping points`;
       const content = `
         <div class="hover-count">${escapeHtml(countLabel)}</div>
         ${visible.map((item) => `<div class="hover-item">${hoverItemContent(item)}</div>`).join("")}
         ${candidates.length > visible.length ? `<div class="hover-more">+${candidates.length - visible.length} more nearby</div>` : ""}
       `;
+      const mapSize = map.getSize();
+      let direction = point.y < mapSize.y / 2 ? "bottom" : "top";
+      if (point.x < 180) direction = "right";
+      if (point.x > mapSize.x - 180) direction = "left";
+      const offsets = {
+        top: [0, -12],
+        right: [12, 0],
+        bottom: [0, 12],
+        left: [-12, 0]
+      };
+      hoverState.tooltip.options.direction = direction;
+      hoverState.tooltip.options.offset = offsets[direction];
       hoverState.tooltip.setLatLng(event.latlng).setContent(content).openOn(map);
       hoverState.open = true;
     }
