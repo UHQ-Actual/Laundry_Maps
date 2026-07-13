@@ -382,6 +382,34 @@
       font-weight: 400;
     }
 
+    .hover-tooltip {
+      max-width: min(360px, calc(100vw - 32px));
+      pointer-events: none;
+      white-space: normal;
+    }
+
+    .hover-count {
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .hover-item + .hover-item {
+      margin-top: 6px;
+      border-top: 1px solid var(--line);
+      padding-top: 6px;
+    }
+
+    .hover-more {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+    }
+
     .popup-title {
       font-weight: 700;
       font-size: 14px;
@@ -541,7 +569,7 @@
       attribution: "&copy; OpenStreetMap contributors"
     }).addTo(map);
 
-    const canvasRenderer = L.canvas({ padding: 0.5 });
+    const canvasRenderer = L.canvas({ padding: 0.5, tolerance: 10 });
     const h2aLayer = L.layerGroup().addTo(map);
     const laundryLayer = L.layerGroup().addTo(map);
     const stateCampLayer = L.layerGroup().addTo(map);
@@ -576,6 +604,21 @@
       housing: getComputedStyle(document.documentElement).getPropertyValue("--housing").trim(),
       laundry: getComputedStyle(document.documentElement).getPropertyValue("--laundry").trim(),
       stateCamp: getComputedStyle(document.documentElement).getPropertyValue("--state-camp").trim()
+    };
+
+    const hoverState = {
+      cellSize: 32,
+      grid: new Map(),
+      frame: null,
+      lastEvent: null,
+      open: false,
+      tooltip: L.tooltip({
+        className: "name-tooltip hover-tooltip",
+        direction: "top",
+        offset: [0, -12],
+        opacity: 1,
+        interactive: false
+      })
     };
 
     function escapeHtml(value) {
@@ -867,13 +910,6 @@
           fillOpacity: hasMatch ? (loc.sensitive ? 0.78 : 0.66) : 0.28
         });
 
-        marker.bindTooltip(locationTooltip(loc), {
-          className: "name-tooltip",
-          direction: "top",
-          offset: [0, -8],
-          opacity: 1,
-          sticky: true
-        });
         marker.bindPopup(locationPopup(loc));
         marker.on("click", () => selectLocation(loc.id));
         model.locationMarkers.set(loc.id, marker);
@@ -889,13 +925,6 @@
           fillOpacity: 0.84
         });
 
-        marker.bindTooltip(laundryTooltip(laundry), {
-          className: "name-tooltip",
-          direction: "top",
-          offset: [0, -8],
-          opacity: 1,
-          sticky: true
-        });
         marker.bindPopup(laundryPopup(laundry));
         marker.on("click", () => selectLaundry(laundry.id));
         model.laundryMarkers.set(laundry.id, marker);
@@ -913,13 +942,6 @@
           fillOpacity: 0.82
         });
 
-        marker.bindTooltip(stateCampTooltip(camp), {
-          className: "name-tooltip",
-          direction: "top",
-          offset: [0, -9],
-          opacity: 1,
-          sticky: true
-        });
         marker.bindPopup(stateCampPopup(camp));
         marker.on("click", () => selectStateCamp(camp.state_inspected_id));
         model.stateCampMarkers.set(camp.state_inspected_id, marker);
@@ -948,6 +970,7 @@
       return `
         ${escapeHtml(loc.name)}
         <span class="tooltip-meta">${escapeHtml(loc.type || "location")} | ${escapeHtml(loc.state)} | ${formatInt(loc.workers)} workers</span>
+        <span class="tooltip-meta">${escapeHtml(loc.address || "No address")}</span>
       `;
     }
 
@@ -968,6 +991,7 @@
       return `
         ${escapeHtml(laundry.name)}
         <span class="tooltip-meta">${formatInt(laundry.locationIds.size)} linked H-2A locations</span>
+        <span class="tooltip-meta">${escapeHtml(laundry.address || "No address")}</span>
       `;
     }
 
@@ -994,7 +1018,86 @@
       return `
         ${escapeHtml(camp.facility_name || "State-inspected camp")}
         <span class="tooltip-meta">${escapeHtml(camp.program_state || camp.state || "--")} state-inspected housing | ${escapeHtml(campCrosswalkStatus(camp))}</span>
+        <span class="tooltip-meta">${escapeHtml(camp.full_address || "No address")}</span>
       `;
+    }
+
+    function hoverCellKey(x, y) {
+      return `${Math.floor(x / hoverState.cellSize)},${Math.floor(y / hoverState.cellSize)}`;
+    }
+
+    function addHoverPoint(marker, kind, id) {
+      if (!marker || !map.hasLayer(marker)) return;
+      const point = map.latLngToContainerPoint(marker.getLatLng());
+      const radius = typeof marker.getRadius === "function" ? marker.getRadius() : 7;
+      const item = { marker, kind, id, x: point.x, y: point.y, radius };
+      const key = hoverCellKey(point.x, point.y);
+      if (!hoverState.grid.has(key)) hoverState.grid.set(key, []);
+      hoverState.grid.get(key).push(item);
+    }
+
+    function rebuildHoverIndex() {
+      hoverState.grid.clear();
+      model.filteredLocationIds.forEach((id) => addHoverPoint(model.locationMarkers.get(id), "location", id));
+      model.filteredLaundryIds.forEach((id) => addHoverPoint(model.laundryMarkers.get(id), "laundry", id));
+      model.filteredStateCampIds.forEach((id) => addHoverPoint(model.stateCampMarkers.get(id), "camp", id));
+    }
+
+    function closeHoverTooltip() {
+      if (hoverState.open) {
+        map.closeTooltip(hoverState.tooltip);
+        hoverState.open = false;
+      }
+    }
+
+    function hoverItemContent(item) {
+      if (item.kind === "location") return locationTooltip(model.locations.get(item.id));
+      if (item.kind === "laundry") return laundryTooltip(model.laundries.get(item.id));
+      return stateCampTooltip(model.stateCamps.get(item.id));
+    }
+
+    function updateHoverTooltip(event) {
+      const point = event.containerPoint;
+      const baseX = Math.floor(point.x / hoverState.cellSize);
+      const baseY = Math.floor(point.y / hoverState.cellSize);
+      const candidates = [];
+
+      for (let dx = -1; dx <= 1; dx += 1) {
+        for (let dy = -1; dy <= 1; dy += 1) {
+          const cell = hoverState.grid.get(`${baseX + dx},${baseY + dy}`) || [];
+          cell.forEach((item) => {
+            const distance = Math.hypot(point.x - item.x, point.y - item.y);
+            const hitRadius = Math.max(14, item.radius + 7);
+            if (distance <= hitRadius) candidates.push({ ...item, distance });
+          });
+        }
+      }
+
+      if (!candidates.length) {
+        closeHoverTooltip();
+        return;
+      }
+
+      const priority = { camp: 0, location: 1, laundry: 2 };
+      candidates.sort((a, b) => a.distance - b.distance || priority[a.kind] - priority[b.kind]);
+      const visible = candidates.slice(0, 6);
+      const countLabel = candidates.length === 1 ? "1 point" : `${candidates.length} overlapping points`;
+      const content = `
+        <div class="hover-count">${escapeHtml(countLabel)}</div>
+        ${visible.map((item) => `<div class="hover-item">${hoverItemContent(item)}</div>`).join("")}
+        ${candidates.length > visible.length ? `<div class="hover-more">+${candidates.length - visible.length} more nearby</div>` : ""}
+      `;
+      hoverState.tooltip.setLatLng(event.latlng).setContent(content).openOn(map);
+      hoverState.open = true;
+    }
+
+    function scheduleHover(event) {
+      hoverState.lastEvent = event;
+      if (hoverState.frame !== null) return;
+      hoverState.frame = requestAnimationFrame(() => {
+        hoverState.frame = null;
+        if (hoverState.lastEvent) updateHoverTooltip(hoverState.lastEvent);
+      });
     }
 
     function applyFilters(options = {}) {
@@ -1048,6 +1151,7 @@
         const marker = model.stateCampMarkers.get(id);
         if (marker) marker.addTo(stateCampLayer);
       });
+      rebuildHoverIndex();
     }
 
     function updateMetrics() {
@@ -1400,6 +1504,11 @@
 
     $("resetFilters").addEventListener("click", resetFilters);
     $("fitFiltered").addEventListener("click", fitFilteredBounds);
+
+    map.on("mousemove", scheduleHover);
+    map.on("movestart zoomstart", closeHoverTooltip);
+    map.on("moveend zoomend", rebuildHoverIndex);
+    map.getContainer().addEventListener("mouseleave", closeHoverTooltip);
 
     function parseCsv(url, required = true) {
       return new Promise((resolve, reject) => {
