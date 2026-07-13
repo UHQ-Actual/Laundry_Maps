@@ -425,13 +425,28 @@
       white-space: normal;
     }
 
+    .hover-tooltip.is-pinned {
+      border-color: rgba(15, 118, 110, 0.65);
+      box-shadow: 0 10px 28px rgba(15, 118, 110, 0.22);
+    }
+
     .hover-count {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
       margin-bottom: 5px;
       color: var(--muted);
       font-size: 10px;
       font-weight: 700;
       letter-spacing: 0.04em;
       text-transform: uppercase;
+    }
+
+    .hover-lock {
+      color: var(--accent);
+      text-align: right;
+      white-space: nowrap;
     }
 
     .hover-item + .hover-item {
@@ -661,6 +676,7 @@
       lastEvent: null,
       suspended: false,
       open: false,
+      pinned: false,
       tooltip: L.tooltip({
         className: "name-tooltip hover-tooltip",
         direction: "top",
@@ -979,8 +995,11 @@
           fillOpacity: hasMatch ? (loc.sensitive ? 0.78 : 0.66) : 0.28
         });
 
+        marker.on("click", (event) => {
+          pinHoverTooltip(event);
+          selectLocation(loc.id);
+        });
         marker.bindPopup(locationPopup(loc));
-        marker.on("click", () => selectLocation(loc.id));
         model.locationMarkers.set(loc.id, marker);
       });
 
@@ -994,8 +1013,11 @@
           fillOpacity: 0.92
         });
 
+        marker.on("click", (event) => {
+          pinHoverTooltip(event);
+          selectLaundry(laundry.id);
+        });
         marker.bindPopup(laundryPopup(laundry));
-        marker.on("click", () => selectLaundry(laundry.id));
         model.laundryMarkers.set(laundry.id, marker);
       });
 
@@ -1011,8 +1033,11 @@
           fillOpacity: 0.82
         });
 
+        marker.on("click", (event) => {
+          pinHoverTooltip(event);
+          selectStateCamp(camp.state_inspected_id);
+        });
         marker.bindPopup(stateCampPopup(camp));
-        marker.on("click", () => selectStateCamp(camp.state_inspected_id));
         model.stateCampMarkers.set(camp.state_inspected_id, marker);
       });
     }
@@ -1125,16 +1150,45 @@
       model.filteredStateCampIds.forEach((id) => addHoverPoint(model.stateCampMarkers.get(id), "camp", id));
     }
 
-    function closeHoverTooltip() {
+    function closeHoverTooltip(force = false) {
+      if (hoverState.pinned && !force) return;
       if (hoverState.open) {
         map.closeTooltip(hoverState.tooltip);
         hoverState.open = false;
       }
     }
 
+    function unlockHoverTooltip() {
+      hoverState.pinned = false;
+      hoverState.lastEvent = null;
+      closeHoverTooltip(true);
+    }
+
+    function updateHoverLockAppearance() {
+      const tooltipElement = hoverState.tooltip.getElement();
+      if (!tooltipElement) return;
+      tooltipElement.classList.toggle("is-pinned", hoverState.pinned);
+      const lockLabel = tooltipElement.querySelector(".hover-lock");
+      if (lockLabel) lockLabel.textContent = hoverState.pinned ? "Locked - click map or Esc" : "Click marker to lock";
+    }
+
+    function pinHoverTooltip(event) {
+      const wasPinned = hoverState.pinned;
+      hoverState.pinned = true;
+      if (!wasPinned && hoverState.open) {
+        updateHoverLockAppearance();
+        return;
+      }
+      const latlng = event.latlng || map.containerPointToLatLng(event.containerPoint);
+      const containerPoint = map.latLngToContainerPoint(latlng);
+      rebuildHoverIndex();
+      hoverState.lastEvent = { containerPoint, latlng };
+      updateHoverTooltip(hoverState.lastEvent);
+    }
+
     function suspendHoverTracking() {
       hoverState.suspended = true;
-      hoverState.lastEvent = null;
+      if (!hoverState.pinned) hoverState.lastEvent = null;
       if (hoverState.frame !== null) {
         cancelAnimationFrame(hoverState.frame);
         hoverState.frame = null;
@@ -1143,7 +1197,7 @@
         cancelAnimationFrame(hoverState.resumeFrame);
         hoverState.resumeFrame = null;
       }
-      closeHoverTooltip();
+      if (!hoverState.pinned) closeHoverTooltip();
     }
 
     function resumeHoverTracking() {
@@ -1156,12 +1210,13 @@
     }
 
     function leaveMapHoverArea() {
+      if (hoverState.pinned) return;
       hoverState.lastEvent = null;
       closeHoverTooltip();
     }
 
     function scheduleContainerHover(event) {
-      if (hoverState.suspended) return;
+      if (hoverState.suspended || hoverState.pinned) return;
       if (event.target.closest && event.target.closest(".leaflet-control")) {
         leaveMapHoverArea();
         return;
@@ -1207,7 +1262,10 @@
       const visible = candidates.slice(0, 4);
       const countLabel = candidates.length === 1 ? "1 point" : `${candidates.length} overlapping points`;
       const content = `
-        <div class="hover-count">${escapeHtml(countLabel)}</div>
+        <div class="hover-count">
+          <span>${escapeHtml(countLabel)}</span>
+          <span class="hover-lock">${hoverState.pinned ? "Locked - click map or Esc" : "Click marker to lock"}</span>
+        </div>
         ${visible.map((item) => `<div class="hover-item">${hoverItemContent(item)}</div>`).join("")}
         ${candidates.length > visible.length ? `<div class="hover-more">+${candidates.length - visible.length} more nearby</div>` : ""}
       `;
@@ -1225,10 +1283,11 @@
       hoverState.tooltip.options.offset = offsets[direction];
       hoverState.tooltip.setLatLng(event.latlng).setContent(content).openOn(map);
       hoverState.open = true;
+      updateHoverLockAppearance();
     }
 
     function scheduleHover(event) {
-      if (hoverState.suspended) return;
+      if (hoverState.suspended || hoverState.pinned) return;
       hoverState.lastEvent = event;
       if (hoverState.frame !== null) return;
       hoverState.frame = requestAnimationFrame(() => {
@@ -1667,10 +1726,16 @@
     $("resetFilters").addEventListener("click", resetFilters);
     $("fitFiltered").addEventListener("click", fitFilteredBounds);
 
+    map.on("click", (event) => {
+      if (event.sourceTarget === map) unlockHoverTooltip();
+    });
     map.on("movestart zoomstart", suspendHoverTracking);
     map.on("moveend zoomend resize", resumeHoverTracking);
     map.getContainer().addEventListener("pointermove", scheduleContainerHover, { passive: true, capture: true });
     map.getContainer().addEventListener("mouseleave", leaveMapHoverArea);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") unlockHoverTooltip();
+    });
 
     function parseCsv(url, required = true) {
       return new Promise((resolve, reject) => {
