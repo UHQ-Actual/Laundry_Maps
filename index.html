@@ -557,6 +557,7 @@
     const CSV_URL = "data/processed/consolidated_proximity.csv";
     const STATE_CAMPS_CSV_URL = "data/processed/state_inspected_migrant_housing.csv";
     const CAMP_CROSSWALK_CSV_URL = "data/processed/h2a_state_camp_crosswalk.csv";
+    const LAUNDRY_EVIDENCE_CSV_URL = "data/processed/laundry_facility_evidence.csv";
     const $ = (id) => document.getElementById(id);
 
     const map = L.map("map", {
@@ -588,6 +589,7 @@
       crosswalkRows: [],
       crosswalkByCamp: new Map(),
       crosswalkByLocation: new Map(),
+      laundryEvidenceByCamp: new Map(),
       locationMarkers: new Map(),
       laundryMarkers: new Map(),
       stateCampMarkers: new Map(),
@@ -719,7 +721,10 @@
         camp.crosswalk?.match_status,
         camp.crosswalk?.h2a_entity_name,
         camp.crosswalk?.h2a_address,
-        camp.crosswalk?.h2a_case_numbers
+        camp.crosswalk?.h2a_case_numbers,
+        camp.laundryEvidence?.status_label,
+        camp.laundryEvidence?.claim_assessment,
+        camp.laundryEvidence?.official_rule_finding
       ].join(" ").toLowerCase();
     }
 
@@ -885,6 +890,16 @@
       });
     }
 
+    function buildLaundryEvidenceModel(rows) {
+      model.laundryEvidenceByCamp.clear();
+      rows.forEach((row) => {
+        if (!row.state_inspected_id) return;
+        model.laundryEvidenceByCamp.set(row.state_inspected_id, row);
+        const camp = model.stateCamps.get(row.state_inspected_id);
+        if (camp) camp.laundryEvidence = row;
+      });
+    }
+
     function populateFilters() {
       const states = uniqueSorted(model.h2aRows.map((row) => row.state));
       const districts = uniqueSorted(model.h2aRows.map((row) => row.district_office));
@@ -997,6 +1012,7 @@
 
     function stateCampPopup(camp) {
       const crosswalk = camp.crosswalk;
+      const evidence = camp.laundryEvidence;
       return `
         <div class="popup-title">${escapeHtml(camp.facility_name || "State-inspected camp")}</div>
         <div class="popup-meta">
@@ -1009,6 +1025,8 @@
           ${camp.expiration_date ? `Expiration: ${escapeHtml(camp.expiration_date)}<br>` : ""}
           Crosswalk: ${escapeHtml(crosswalk?.match_status || "unmatched")}<br>
           ${crosswalk?.h2a_entity_name ? `Local H-2A entity: ${escapeHtml(crosswalk.h2a_entity_name)}<br>` : ""}
+          ${evidence ? `Laundry evidence: ${escapeHtml(evidence.status_label)}<br>` : ""}
+          ${evidence?.official_rule_url ? `<a href="${escapeHtml(evidence.official_rule_url)}" target="_blank" rel="noopener">Open laundry requirement</a><br>` : ""}
           ${camp.source_url ? `<a href="${escapeHtml(camp.source_url)}" target="_blank" rel="noopener">Open state source</a>` : ""}
         </div>
       `;
@@ -1350,6 +1368,7 @@
       const camp = model.stateCamps.get(campId);
       if (!camp) return;
       const crosswalk = camp.crosswalk;
+      const evidence = camp.laundryEvidence;
       const linkedLocation = crosswalk?.h2a_location_id
         ? model.locations.get(crosswalk.h2a_location_id)
         : null;
@@ -1377,6 +1396,30 @@
           ${camp.coverage_note ? `<div><b>Source note:</b> ${escapeHtml(camp.coverage_note)}</div>` : ""}
           ${camp.source_url ? `<div><a href="${escapeHtml(camp.source_url)}" target="_blank" rel="noopener">Open state source</a></div>` : ""}
         </div>
+        ${evidence ? `
+          <h3>Laundry facility evidence</h3>
+          <div class="match-list">
+            <div class="match-item">
+              <div class="match-title">
+                <span>${escapeHtml(evidence.status_label)}</span>
+                <span class="pill">${escapeHtml(evidence.evidence_status)}</span>
+              </div>
+              <div class="kv">
+                <div><b>Assessment:</b> ${escapeHtml(evidence.claim_assessment)}</div>
+                <div><b>Official rule:</b> ${escapeHtml(evidence.official_rule_finding)}</div>
+                <div><b>ETA-790A:</b> ${escapeHtml(evidence.eta_790a_finding)}</div>
+                <div><b>Other public evidence:</b> ${escapeHtml(evidence.public_listing_finding)}</div>
+                <div><b>Inspection paperwork:</b> ${escapeHtml(evidence.inspection_record_status)}</div>
+                <div><b>Reviewed:</b> ${escapeHtml(evidence.last_reviewed_date)}</div>
+                <div>${escapeHtml(evidence.research_note)}</div>
+                <div><a href="${escapeHtml(evidence.official_rule_url)}" target="_blank" rel="noopener">Illinois laundry requirement</a></div>
+                <div><a href="${escapeHtml(evidence.idph_program_url)}" target="_blank" rel="noopener">IDPH migrant labor program</a></div>
+                <div><a href="${escapeHtml(evidence.idph_foia_url)}" target="_blank" rel="noopener">IDPH records request guidance</a></div>
+                <div><a href="${escapeHtml(evidence.public_listing_url)}" target="_blank" rel="noopener">Third-party listing counterevidence</a></div>
+              </div>
+            </div>
+          </div>
+        ` : ""}
         <h3>Local H-2A housing crosswalk</h3>
         <div class="match-list">
           <div class="match-item">
@@ -1527,14 +1570,16 @@
 
     async function init() {
       try {
-        const [proximityRows, stateCampRows, crosswalkRows] = await Promise.all([
+        const [proximityRows, stateCampRows, crosswalkRows, laundryEvidenceRows] = await Promise.all([
           parseCsv(CSV_URL, true),
           parseCsv(STATE_CAMPS_CSV_URL, false),
-          parseCsv(CAMP_CROSSWALK_CSV_URL, false)
+          parseCsv(CAMP_CROSSWALK_CSV_URL, false),
+          parseCsv(LAUNDRY_EVIDENCE_CSV_URL, false)
         ]);
         buildModel(proximityRows);
         buildStateCampModel(stateCampRows);
         buildCrosswalkModel(crosswalkRows);
+        buildLaundryEvidenceModel(laundryEvidenceRows);
         populateFilters();
         readHash();
         createMarkers();
