@@ -625,11 +625,16 @@
       attribution: "&copy; OpenStreetMap contributors"
     }).addTo(map);
 
+    map.createPane("connectionLinesPane");
+    map.getPane("connectionLinesPane").style.zIndex = "390";
+    map.getPane("connectionLinesPane").style.pointerEvents = "none";
+
     const canvasRenderer = L.canvas({ padding: 0.5, tolerance: 10 });
     const h2aLayer = L.layerGroup().addTo(map);
     const laundryLayer = L.layerGroup().addTo(map);
     const stateCampLayer = L.layerGroup().addTo(map);
     const lineLayer = L.layerGroup().addTo(map);
+    const maxLaundryConnections = 12;
 
     const model = {
       sourceRows: 0,
@@ -700,6 +705,10 @@
       if (typeof value === "string" && value.trim() === "") return null;
       const parsed = Number(value);
       return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function workersForRow(row) {
+      return numberValue(row.workers_requested ?? row.workers_certified) || 0;
     }
 
     function inMidwestBounds(lat, lon) {
@@ -1172,6 +1181,12 @@
       if (lockLabel) lockLabel.textContent = hoverState.pinned ? "Locked - click map or Esc" : "Click marker to lock";
     }
 
+    function restorePinnedHoverTooltip() {
+      if (!hoverState.pinned || !hoverState.open || map.hasLayer(hoverState.tooltip)) return;
+      hoverState.tooltip.openOn(map);
+      updateHoverLockAppearance();
+    }
+
     function pinHoverTooltip(event) {
       const wasPinned = hoverState.pinned;
       hoverState.pinned = true;
@@ -1206,6 +1221,7 @@
         hoverState.resumeFrame = null;
         rebuildHoverIndex();
         hoverState.suspended = false;
+        restorePinnedHoverTooltip();
       });
     }
 
@@ -1456,6 +1472,77 @@
         .sort((a, b) => Number(a.distance_km) - Number(b.distance_km));
     }
 
+    function contractKeysForRow(row) {
+      const caseNumbers = String(row.h2a_case_numbers || "")
+        .split(/[;,|]+/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      return caseNumbers.length ? caseNumbers : [`location:${row.location_id}`];
+    }
+
+    function laundryConnectionGroups(laundryId, limit = maxLaundryConnections) {
+      const groups = new Map();
+      filteredRowsForLaundry(laundryId).forEach((row) => {
+        const key = `${Number(row._h2aLat).toFixed(6)},${Number(row._h2aLon).toFixed(6)}`;
+        if (!groups.has(key)) {
+          groups.set(key, {
+            lat: row._h2aLat,
+            lon: row._h2aLon,
+            distance: numberValue(row.distance_km) ?? Infinity,
+            rows: [],
+            workersByContract: new Map()
+          });
+        }
+        const group = groups.get(key);
+        group.rows.push(row);
+        contractKeysForRow(row).forEach((contractKey) => {
+          group.workersByContract.set(
+            contractKey,
+            Math.max(group.workersByContract.get(contractKey) || 0, workersForRow(row))
+          );
+        });
+      });
+      return Array.from(groups.values())
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, limit);
+    }
+
+    function workersForConnectionGroup(group) {
+      return Array.from(group.workersByContract.values()).reduce((sum, workers) => sum + workers, 0);
+    }
+
+    function drawLaundryConnections(laundry, groups) {
+      groups.forEach((group) => {
+        const lineWeight = Math.min(4.8, 1.8 + Math.sqrt(workersForConnectionGroup(group)) * 0.25);
+        const coordinates = [[laundry.lat, laundry.lon], [group.lat, group.lon]];
+        L.polyline(coordinates, {
+          pane: "connectionLinesPane",
+          color: "#ffffff",
+          weight: lineWeight + 3,
+          opacity: 0.9,
+          interactive: false
+        }).addTo(lineLayer);
+        L.polyline(coordinates, {
+          pane: "connectionLinesPane",
+          color: colors.laundry,
+          weight: lineWeight,
+          opacity: 0.96,
+          interactive: false
+        }).addTo(lineLayer);
+      });
+    }
+
+    function focusLaundryConnections(laundry, groups) {
+      if (!groups.length) return;
+      const bounds = L.latLngBounds([
+        [laundry.lat, laundry.lon],
+        ...groups.map((group) => [group.lat, group.lon])
+      ]);
+      if (map.getZoom() < 10 || !map.getBounds().contains(bounds)) {
+        map.fitBounds(bounds, { padding: [70, 70], maxZoom: 12 });
+      }
+    }
+
     function selectLocation(locationId) {
       const loc = model.locations.get(locationId);
       const rows = filteredRowsForLocation(locationId);
@@ -1516,16 +1603,23 @@
     function selectLaundry(laundryId) {
       const laundry = model.laundries.get(laundryId);
       const rows = filteredRowsForLaundry(laundryId);
+      const connectionGroups = laundryConnectionGroups(laundryId);
       lineLayer.clearLayers();
 
-      rows.slice(0, 80).forEach((row) => {
-        L.polyline(
-          [[row._h2aLat, row._h2aLon], [row._laundryLat, row._laundryLon]],
-          { color: colors.laundry, weight: 1.4, opacity: 0.44 }
-        ).addTo(lineLayer);
-      });
+      drawLaundryConnections(laundry, connectionGroups);
+      focusLaundryConnections(laundry, connectionGroups);
 
       const uniqueLocations = new Set(rows.map((row) => row.location_id));
+      const connectedWorkersByContract = new Map();
+      connectionGroups.forEach((group) => {
+        group.workersByContract.forEach((workers, contractKey) => {
+          connectedWorkersByContract.set(
+            contractKey,
+            Math.max(connectedWorkersByContract.get(contractKey) || 0, workers)
+          );
+        });
+      });
+      const connectedWorkers = Array.from(connectedWorkersByContract.values()).reduce((sum, workers) => sum + workers, 0);
       $("detailTitle").textContent = laundry.name;
       $("detail").innerHTML = `
         <div class="kv">
@@ -1535,9 +1629,10 @@
           <div><b>Confidence:</b> ${escapeHtml(laundry.confidence || "--")} <b>Linked locations:</b> ${formatInt(uniqueLocations.size)}</div>
           ${laundry.source ? `<div><a href="${escapeHtml(laundry.source)}" target="_blank" rel="noopener">Open source</a></div>` : ""}
         </div>
-        <h3>Closest H-2A locations</h3>
+        <p class="note"><b>Map lines:</b> ${connectionGroups.length ? `${formatInt(connectionGroups.length)} closest physical H-2A worker location${connectionGroups.length === 1 ? "" : "s"}, covering ${formatInt(connectedWorkersByContract.size)} contract${connectedWorkersByContract.size === 1 ? "" : "s"} and ${formatInt(connectedWorkers)} workers. Line width scales with workers at each location.` : "No linked H-2A locations under the current filters."}</p>
+        <h3>Connected H-2A contracts and worker locations</h3>
         <div class="match-list">
-          ${rows.slice(0, 20).map((row) => locationMatchItem(row)).join("") || '<p class="empty">No visible H-2A locations under the current filters.</p>'}
+          ${connectionGroups.map((group) => connectionGroupItem(group)).join("") || '<p class="empty">No visible H-2A locations under the current filters.</p>'}
         </div>
       `;
     }
@@ -1636,17 +1731,23 @@
       `;
     }
 
-    function locationMatchItem(row) {
+    function connectionGroupItem(group) {
+      const first = group.rows[0];
+      const names = Array.from(new Set(group.rows.map((row) => cleanName(row.h2a_entity_name, "H-2A location"))));
+      const cases = Array.from(group.workersByContract.keys()).filter((value) => !value.startsWith("location:"));
+      const types = Array.from(new Set(group.rows.map((row) => row.h2a_location_type).filter(Boolean)));
+      const nameLabel = `${names.slice(0, 2).join(" / ")}${names.length > 2 ? ` +${names.length - 2} more` : ""}`;
       return `
         <div class="match-item">
           <div class="match-title">
-            <span>${escapeHtml(cleanName(row.h2a_entity_name, "H-2A location"))}</span>
-            <span class="pill">${formatKm(row.distance_km)}</span>
+            <span>${escapeHtml(nameLabel)}</span>
+            <span class="pill">${formatKm(group.distance)}</span>
           </div>
           <div class="kv">
-            <div>${escapeHtml(row.h2a_address || "No address")}</div>
-            <div><b>Type:</b> ${escapeHtml(row.h2a_location_type || "--")} <b>Workers:</b> ${formatInt(numberValue(row.workers_certified) || 0)}</div>
-            ${boolValue(row.sensitive_housing) ? '<div><span class="pill">Sensitive housing</span></div>' : ""}
+            <div>${escapeHtml(first.h2a_address || "No address")}</div>
+            <div><b>Type:</b> ${escapeHtml(types.join(", ") || "--")} <b>Workers:</b> ${formatInt(workersForConnectionGroup(group))}</div>
+            ${cases.length ? `<div><b>Contract${cases.length === 1 ? "" : "s"}:</b> ${escapeHtml(cases.join(", "))}</div>` : ""}
+            ${group.rows.some((row) => boolValue(row.sensitive_housing)) ? '<div><span class="pill">Sensitive housing</span></div>' : ""}
           </div>
         </div>
       `;
@@ -1731,6 +1832,7 @@
     });
     map.on("movestart zoomstart", suspendHoverTracking);
     map.on("moveend zoomend resize", resumeHoverTracking);
+    map.on("popupopen popupclose", restorePinnedHoverTooltip);
     map.getContainer().addEventListener("pointermove", scheduleContainerHover, { passive: true, capture: true });
     map.getContainer().addEventListener("mouseleave", leaveMapHoverArea);
     document.addEventListener("keydown", (event) => {
