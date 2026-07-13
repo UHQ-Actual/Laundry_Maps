@@ -657,7 +657,9 @@
       cellSize: 32,
       grid: new Map(),
       frame: null,
+      resumeFrame: null,
       lastEvent: null,
+      suspended: false,
       open: false,
       tooltip: L.tooltip({
         className: "name-tooltip hover-tooltip",
@@ -1130,6 +1132,48 @@
       }
     }
 
+    function suspendHoverTracking() {
+      hoverState.suspended = true;
+      hoverState.lastEvent = null;
+      if (hoverState.frame !== null) {
+        cancelAnimationFrame(hoverState.frame);
+        hoverState.frame = null;
+      }
+      if (hoverState.resumeFrame !== null) {
+        cancelAnimationFrame(hoverState.resumeFrame);
+        hoverState.resumeFrame = null;
+      }
+      closeHoverTooltip();
+    }
+
+    function resumeHoverTracking() {
+      if (hoverState.resumeFrame !== null) cancelAnimationFrame(hoverState.resumeFrame);
+      hoverState.resumeFrame = requestAnimationFrame(() => {
+        hoverState.resumeFrame = null;
+        rebuildHoverIndex();
+        hoverState.suspended = false;
+      });
+    }
+
+    function leaveMapHoverArea() {
+      hoverState.lastEvent = null;
+      closeHoverTooltip();
+    }
+
+    function scheduleContainerHover(event) {
+      if (hoverState.suspended) return;
+      if (event.target.closest && event.target.closest(".leaflet-control")) {
+        leaveMapHoverArea();
+        return;
+      }
+      const rect = map.getContainer().getBoundingClientRect();
+      const point = L.point(event.clientX - rect.left, event.clientY - rect.top);
+      scheduleHover({
+        containerPoint: point,
+        latlng: map.containerPointToLatLng(point)
+      });
+    }
+
     function hoverItemContent(item) {
       if (item.kind === "location") return locationTooltip(model.locations.get(item.id));
       if (item.kind === "laundry") return laundryTooltip(model.laundries.get(item.id));
@@ -1184,6 +1228,7 @@
     }
 
     function scheduleHover(event) {
+      if (hoverState.suspended) return;
       hoverState.lastEvent = event;
       if (hoverState.frame !== null) return;
       hoverState.frame = requestAnimationFrame(() => {
@@ -1622,10 +1667,10 @@
     $("resetFilters").addEventListener("click", resetFilters);
     $("fitFiltered").addEventListener("click", fitFilteredBounds);
 
-    map.on("mousemove", scheduleHover);
-    map.on("movestart zoomstart", closeHoverTooltip);
-    map.on("moveend zoomend", rebuildHoverIndex);
-    map.getContainer().addEventListener("mouseleave", closeHoverTooltip);
+    map.on("movestart zoomstart", suspendHoverTracking);
+    map.on("moveend zoomend resize", resumeHoverTracking);
+    map.getContainer().addEventListener("pointermove", scheduleContainerHover, { passive: true, capture: true });
+    map.getContainer().addEventListener("mouseleave", leaveMapHoverArea);
 
     function parseCsv(url, required = true) {
       return new Promise((resolve, reject) => {
